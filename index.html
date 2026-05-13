@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>𓃥 白六麻將推銷樂</title>
+    <style>
+        :root {
+            --bg-color: #1a4a16;
+            --gap: 1.5vw;
+            --tile-w: 14.8vw;
+            --tile-h: 20vw;
+            --base-url: "https://raw.githubusercontent.com/kuochili-ops/mahjong_graphic/main/Vectors%20%E7%9F%A2%E9%87%8F%E5%9B%BE/SVG/";
+        }
+        @media (min-width: 500px) {
+            :root { --tile-w: 70px; --tile-h: 95px; --gap: 8px; }
+        }
+        body {
+            background-color: var(--bg-color);
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; margin: 0; padding-top: 15px;
+            touch-action: manipulation; font-family: "Microsoft JhengHei", sans-serif;
+            overflow: hidden;
+        }
+        .dashboard {
+            width: calc(var(--tile-w) * 6 + var(--gap) * 7);
+            display: flex; justify-content: space-between; margin-bottom: 8px;
+            color: #ffc107; font-weight: bold; font-size: 1.1rem;
+            text-shadow: 1px 1px 2px black;
+        }
+        .dashboard div { background: rgba(0,0,0,0.5); padding: 5px 12px; border-radius: 15px; }
+        .board {
+            position: relative;
+            width: calc(var(--tile-w) * 6 + var(--gap) * 7);
+            height: calc(var(--tile-h) * 6 + var(--gap) * 7);
+            background: #0d2a0d; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .tile {
+            position: absolute; width: var(--tile-w); height: var(--tile-h);
+            background: #fff; border-radius: 4px;
+            box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s ease-out, opacity 0.2s;
+            z-index: 2; cursor: pointer;
+        }
+        .tile img { width: 85%; height: 85%; pointer-events: none; }
+        .tile.selected { box-shadow: 0 0 15px #ffeb3b, 0 3px 0 #bbb; z-index: 10; transform: scale(1.08) !important; }
+        .tile.spawning { transform: scale(0); opacity: 0; }
+        
+        /* 原地粉碎效果 */
+        .shattering {
+            animation: shatterInPlace 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+            pointer-events: none;
+            z-index: 20;
+        }
+        @keyframes shatterInPlace {
+            0% { transform: translate(var(--tx), var(--ty)) scale(1); filter: brightness(1); }
+            20% { transform: translate(var(--tx), var(--ty)) scale(1.1) rotate(3deg); filter: brightness(1.6); }
+            40% { transform: translate(var(--tx), var(--ty)) scale(0.8) rotate(-3deg); }
+            60% { transform: translate(var(--tx), var(--ty)) scale(1.3) rotate(1deg); filter: brightness(2) contrast(1.2); }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; filter: blur(10px); }
+        }
+
+        .slot-target {
+            position: absolute; width: var(--tile-w); height: var(--tile-h);
+            background: rgba(255, 255, 255, 0.05); border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 4px; z-index: 1; display: none;
+        }
+        .slot-target.active { display: block; z-index: 11; background: rgba(255, 235, 59, 0.15); border-color: #ffeb3b; }
+
+        #win-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: none; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 100; color: white;
+        }
+        #win-screen h1 { color: #ffc107; font-size: 2rem; margin-bottom: 10px; }
+        #win-screen button {
+            margin-top: 30px; padding: 12px 40px; font-size: 1.2rem;
+            background: #4caf50; border: none; color: white; border-radius: 30px; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <div id="deck-count">𓃥 剩餘：144</div>
+    <div id="game-timer">00:00</div>
+</div>
+<div id="game-board" class="board"></div>
+
+<div id="win-screen">
+    <h1>𓃥 任務完成！</h1>
+    <p id="final-time">總用時：00:00</p>
+    <button onclick="location.reload()">重新挑戰</button>
+</div>
+
+<script>
+    const ROWS = 6, COLS = 6;
+    const baseUrl = "https://raw.githubusercontent.com/kuochili-ops/mahjong_graphic/main/Vectors%20%E7%9F%A2%E9%87%8F%E5%9B%BE/SVG/";
+    
+    let deck = [];
+    const types = [];
+    for(let i=1; i<=9; i++) ['m','s','p'].forEach(t => types.push(`${i}${t}`));
+    for(let i=1; i<=7; i++) types.push(`${i}z`);
+    types.forEach(code => { for(let j=0; j<4; j++) deck.push(code); });
+    deck.sort(() => Math.random() - 0.5);
+
+    let board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+    let isProcessing = false;
+    let selectedTile = null;
+    let seconds = 0;
+    let timerActive = true;
+    let slotTargets = [];
+
+    const boardEl = document.getElementById('game-board');
+
+    function updateTilePos(obj) {
+        const stepW = boardEl.offsetWidth / 6;
+        const stepH = boardEl.offsetHeight / 6;
+        const tx = obj.c * stepW + (stepW*0.03);
+        const ty = obj.r * stepH + (stepH*0.03);
+        obj.el.style.setProperty('--tx', `${tx}px`);
+        obj.el.style.setProperty('--ty', `${ty}px`);
+        obj.el.style.transform = `translate(${tx}px, ${ty}px)`;
+    }
+
+    function createTile(r, c, isInitial = false) {
+        if (deck.length === 0) return null;
+        let tileCode = "";
+        if(isInitial) {
+            for(let i=0; i<deck.length; i++) {
+                const code = deck[i];
+                const upMatch = (board[r-1] && board[r-1][c] && board[r-1][c].code === code);
+                const leftMatch = (board[r] && board[r][c-1] && board[r][c-1].code === code);
+                if(!upMatch && !leftMatch) { tileCode = deck.splice(i, 1)[0]; break; }
+            }
+        }
+        if(!tileCode) tileCode = deck.shift();
+        document.getElementById('deck-count').innerText = `𓃥 剩餘：${deck.length}`;
+
+        const el = document.createElement('div');
+        el.className = 'tile' + (isInitial ? '' : ' spawning');
+        el.innerHTML = `<img src="${baseUrl}${tileCode}.svg">`;
+        boardEl.appendChild(el);
+
+        const obj = { code: tileCode, el, r, c };
+        updateTilePos(obj);
+        if(!isInitial) setTimeout(() => el.classList.remove('spawning'), 50);
+        el.onclick = (e) => { e.stopPropagation(); handleTileClick(obj); };
+        return obj;
+    }
+
+    function handleTileClick(obj) {
+        if(isProcessing) return;
+        if(selectedTile === obj) { clearSelection(); return; }
+
+        const adj = [];
+        [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr, dc]) => {
+            const nr = obj.r + dr, nc = obj.c + dc;
+            if(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && board[nr][nc] === null) adj.push({r: nr, c: nc});
+        });
+
+        if(adj.length === 0) return;
+        if(adj.length === 1) { executeMove(obj, adj[0].r, adj[0].c); }
+        else {
+            clearSelection();
+            selectedTile = obj;
+            obj.el.classList.add('selected');
+            adj.forEach(pos => {
+                const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
+                if(target) target.el.classList.add('active');
+            });
+        }
+    }
+
+    function executeMove(obj, tr, tc) {
+        isProcessing = true;
+        clearSelection();
+        board[obj.r][obj.c] = null;
+        obj.r = tr; obj.c = tc;
+        board[tr][tc] = obj;
+        updateTilePos(obj);
+        setTimeout(() => checkElimination(), 250);
+    }
+
+    function clearSelection() {
+        if(selectedTile) selectedTile.el.classList.remove('selected');
+        selectedTile = null;
+        slotTargets.forEach(s => s.el.classList.remove('active'));
+    }
+
+    function checkElimination() {
+        let toKill = new Set();
+        let pairsCount = 0;
+
+        // 偵測所有相鄰對子
+        for(let r=0; r<ROWS; r++) {
+            for(let c=0; c<COLS; c++) {
+                const curr = board[r][c];
+                if(!curr) continue;
+                [[0,1], [1,0]].forEach(([dr, dc]) => {
+                    const nr = r + dr, nc = c + dc;
+                    if(board[nr] && board[nr][nc] && board[nr][nc].code === curr.code) {
+                        const beforeSize = toKill.size;
+                        toKill.add(curr); 
+                        toKill.add(board[nr][nc]);
+                        // 如果 Set 增加了，代表找到新的一對
+                        if (toKill.size > beforeSize) pairsCount++;
+                    }
+                });
+            }
+        }
+
+        if(toKill.size > 0) {
+            toKill.forEach(item => { 
+                item.el.classList.add('shattering');
+                board[item.r][item.c] = null; 
+            });
+            
+            // 關鍵修改：消掉幾對就補幾對 (1對補2張)
+            setTimeout(() => { 
+                toKill.forEach(item => item.el.remove()); 
+                refill(pairsCount * 2); 
+            }, 400);
+        } else {
+            isProcessing = false;
+            checkGameOver();
+        }
+    }
+
+    function refill(count) {
+        let emptyCells = [];
+        for(let r=0; r<ROWS; r++) {
+            for(let c=0; c<COLS; c++) { if(!board[r][c]) emptyCells.push({r, c}); }
+        }
+        emptyCells.sort(() => Math.random() - 0.5);
+        
+        let actualAdded = 0;
+        for(let i=0; i < Math.min(emptyCells.length, count); i++) {
+            const pos = emptyCells[i];
+            const t = createTile(pos.r, pos.c, false);
+            if(t) { board[pos.r][pos.c] = t; actualAdded++; }
+        }
+        
+        // 補完後再次檢查是否能連鎖消除
+        if(actualAdded > 0) setTimeout(() => checkElimination(), 350);
+        else { isProcessing = false; checkGameOver(); }
+    }
+
+    function checkGameOver() {
+        const tilesOnBoard = document.querySelectorAll('.tile:not(.shattering)').length;
+        if(deck.length === 0 && tilesOnBoard === 0) {
+            timerActive = false;
+            document.getElementById('final-time').innerText = `總用時：${document.getElementById('game-timer').innerText}`;
+            document.getElementById('win-screen').style.display = 'flex';
+        }
+    }
+
+    window.onload = () => {
+        for(let r=0; r<6; r++){
+            for(let c=0; c<6; c++){
+                const slot = document.createElement('div');
+                slot.className = 'slot-target';
+                const stepW = boardEl.offsetWidth / 6;
+                const stepH = boardEl.offsetHeight / 6;
+                slot.style.transform = `translate(${c * stepW + (stepW*0.03)}px, ${r * stepH + (stepH*0.03)}px)`;
+                slot.onclick = () => { if(selectedTile && !isProcessing) executeMove(selectedTile, r, c); };
+                boardEl.appendChild(slot);
+                slotTargets.push({r, c, el: slot});
+            }
+        }
+        for(let r=0; r<ROWS; r++) {
+            for(let c=0; c<COLS; c++) {
+                if(r === 5 && c === 5) continue; 
+                board[r][c] = createTile(r, c, true);
+            }
+        }
+        setInterval(() => {
+            if(!timerActive) return;
+            seconds++;
+            const m = Math.floor(seconds/60).toString().padStart(2,'0');
+            const s = (seconds%60).toString().padStart(2,'0');
+            document.getElementById('game-timer').innerText = `${m}:${s}`;
+        }, 1000);
+        boardEl.onclick = clearSelection;
+    };
+</script>
+</body>
+</html>
