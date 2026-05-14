@@ -40,19 +40,22 @@
             background: #fff; border-radius: 4px;
             box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
             display: flex; align-items: center; justify-content: center;
-            transition: transform 0.12s linear, opacity 0.2s;
+            /* 縮短單格位移時間，讓轉彎連續感更好 */
+            transition: transform 0.15s linear, opacity 0.2s;
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
         .tile.selected { 
             box-shadow: 0 0 20px #ffeb3b, 0 3px 0 #bbb; 
-            z-index: 20; filter: brightness(1.1);
+            z-index: 20; 
+            filter: brightness(1.1);
         }
         .tile.spawning { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
         
         .shattering {
             animation: shatterInPlace 0.4s forwards;
-            pointer-events: none; z-index: 30;
+            pointer-events: none;
+            z-index: 30;
         }
         @keyframes shatterInPlace {
             0% { transform: translate(var(--tx), var(--ty)) scale(1); filter: brightness(1); }
@@ -62,19 +65,25 @@
 
         .slot-target {
             position: absolute; width: var(--tile-w); height: var(--tile-h);
-            background: rgba(255, 235, 59, 0.05); border: 2px dashed rgba(255, 235, 59, 0.5);
-            border-radius: 4px; z-index: 1; display: none; cursor: pointer;
+            background: rgba(255, 235, 59, 0.05); 
+            border: 2px dashed rgba(255, 235, 59, 0.5);
+            border-radius: 4px; z-index: 1; display: none;
+            cursor: pointer;
         }
         .slot-target.active { 
-            display: block; z-index: 15; background: rgba(255, 235, 59, 0.2); border-color: #ffeb3b; 
+            display: block; 
+            z-index: 15; 
+            background: rgba(255, 235, 59, 0.2); 
+            border-color: #ffeb3b; 
         }
 
         #start-screen, #win-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
             align-items: center; justify-content: center; z-index: 1000; color: white;
+            text-align: center;
         }
-        .menu-box { background: #222; padding: 30px; border-radius: 20px; border: 2px solid #ffc107; text-align: center;}
+        .menu-box { background: #222; padding: 30px; border-radius: 20px; border: 2px solid #ffc107; }
         .btn-start {
             width: 200px; margin: 10px 0; padding: 15px; font-size: 1.1rem;
             background: #4caf50; border: none; color: white; border-radius: 10px;
@@ -86,9 +95,9 @@
 
 <div id="start-screen">
     <div class="menu-box">
-        <h2>𓃥 白六麻將推銷樂</h2>
-        <button class="btn-start" onclick="initGame('full')">完整模式 (144張)</button>
-        <button class="btn-start" style="background:#2196f3" onclick="initGame('lite')">精簡模式 (隨機2花色)</button>
+        <h2>𓃥 選擇遊戲模式</h2>
+        <button class="btn-start" onclick="initGame('full')">完整挑戰 (144張)</button>
+        <button class="btn-start" style="background:#2196f3" onclick="initGame('lite')">精簡模式 (72張)</button>
     </div>
 </div>
 
@@ -124,7 +133,7 @@
         const honors = ['1z','2z','3z','4z','5z','6z','7z'];
 
         if (mode === 'lite') {
-            const shuffledSuits = [...suits].sort(() => Math.random() - 0.5).slice(0, 2);
+            const shuffledSuits = suits.sort(() => Math.random() - 0.5).slice(0, 2);
             shuffledSuits.forEach(s => { for(let i=1; i<=9; i++) allTypes.push(`${i}${s}`); });
         } else {
             suits.forEach(s => { for(let i=1; i<=9; i++) allTypes.push(`${i}${s}`); });
@@ -151,10 +160,12 @@
         if (deck.length === 0) return null;
         let tileCode = deck.shift();
         document.getElementById('deck-count').innerText = `𓃥 剩餘：${deck.length}`;
+
         const el = document.createElement('div');
         el.className = 'tile' + (isInitial ? '' : ' spawning');
         el.innerHTML = `<img src="${baseUrl}${tileCode}.svg">`;
         boardEl.appendChild(el);
+
         const obj = { code: tileCode, el, r, c };
         updateTilePos(obj);
         if(!isInitial) setTimeout(() => el.classList.remove('spawning'), 50);
@@ -162,11 +173,13 @@
         return obj;
     }
 
+    // BFS 搜尋路徑：回傳 Map，Key 為 "r,c"，Value 為到達該點的路徑陣列
     function findReachable(startR, startC) {
         const reachableMap = new Map();
         const queue = [{r: startR, c: startC, path: []}];
         const visited = new Set([`${startR},${startC}`]);
         const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+
         while(queue.length > 0) {
             const curr = queue.shift();
             dirs.forEach(([dr, dc]) => {
@@ -185,42 +198,48 @@
 
     function handleTileClick(obj) {
         if(isProcessing) return;
-        let emptyCells = [];
-        for(let r=0; r<6; r++) for(let c=0; c<6; c++) if(board[r][c] === null) emptyCells.push({r, c});
-        
-        // 若只有單一空格且鄰近，直接移動
-        if (emptyCells.length === 1) {
-            const target = emptyCells[0];
-            if (Math.abs(target.r - obj.r) + Math.abs(target.c - obj.c) === 1) {
-                executePathMove(obj, [target]);
-                return;
-            }
-        }
-        
         if(selectedTile && selectedTile.el === obj.el) { clearSelection(); return; }
+
         const reachableMap = findReachable(obj.r, obj.c);
         if(reachableMap.size === 0) return;
-        clearSelection();
-        selectedTile = { ...obj, reachableMap }; 
-        obj.el.classList.add('selected');
-        reachableMap.forEach((path, key) => {
-            const [r, c] = key.split(',').map(Number);
-            const target = slotTargets.find(s => s.r === r && s.c === c);
-            if(target) target.el.classList.add('active');
-        });
+
+        // 若只有一個空格選項，直接執行
+        if(reachableMap.size === 1) {
+            const path = reachableMap.values().next().value;
+            executePathMove(obj, path);
+        } else {
+            clearSelection();
+            selectedTile = { ...obj, reachableMap }; 
+            obj.el.classList.add('selected');
+            
+            reachableMap.forEach((path, key) => {
+                const [r, c] = key.split(',').map(Number);
+                const target = slotTargets.find(s => s.r === r && s.c === c);
+                if(target) target.el.classList.add('active');
+            });
+        }
     }
 
+    // 優化：逐格移動，避免切西瓜
     async function executePathMove(obj, path) {
         isProcessing = true;
         clearSelection();
+        
+        // 從舊位置移除
         board[obj.r][obj.c] = null;
+
+        // 沿著路徑逐格移動
         for(let step of path) {
-            obj.r = step.r; obj.c = step.c;
+            obj.r = step.r;
+            obj.c = step.c;
             updateTilePos(obj);
-            await new Promise(res => setTimeout(res, 130));
+            // 等待動畫完成（配合 transition 0.15s）
+            await new Promise(res => setTimeout(res, 160));
         }
+
+        // 抵達新位置
         board[obj.r][obj.c] = obj;
-        setTimeout(() => checkTargetedElimination(obj), 100);
+        setTimeout(() => checkElimination(), 100);
     }
 
     function clearSelection() {
@@ -229,16 +248,25 @@
         selectedTile = null;
     }
 
-    function checkTargetedElimination(targetObj) {
+    function checkElimination() {
         let toKill = new Set();
-        const dirs = [[0,1], [0,-1], [1,0], [-1,0]];
-        dirs.forEach(([dr, dc]) => {
-            const nr = targetObj.r + dr, nc = targetObj.c + dc;
-            const neighbor = (board[nr] && board[nr][nc]);
-            if(neighbor && neighbor.code === targetObj.code) {
-                toKill.add(targetObj); toKill.add(neighbor);
+        let visited = new Set();
+
+        for(let r=0; r<ROWS; r++) {
+            for(let c=0; c<COLS; c++) {
+                const curr = board[r][c];
+                if(!curr || visited.has(curr)) continue;
+                
+                [[0,1], [1,0]].forEach(([dr, dc]) => {
+                    const nr = r + dr, nc = c + dc;
+                    const target = (board[nr] && board[nr][nc]);
+                    if(target && target.code === curr.code && !visited.has(target)) {
+                        toKill.add(curr); toKill.add(target);
+                        visited.add(curr); visited.add(target);
+                    }
+                });
             }
-        });
+        }
 
         if(toKill.size > 0) {
             toKill.forEach(item => { 
@@ -257,8 +285,11 @@
 
     function refill(count) {
         let emptyCells = [];
-        for(let r=0; r<ROWS; r++) for(let c=0; c<COLS; c++) if(!board[r][c]) emptyCells.push({r, c});
+        for(let r=0; r<ROWS; r++) {
+            for(let c=0; c<COLS; c++) { if(!board[r][c]) emptyCells.push({r, c}); }
+        }
         emptyCells.sort(() => Math.random() - 0.5);
+        
         let added = 0;
         for(let i=0; i < Math.min(emptyCells.length, count); i++) {
             if(deck.length > 0) {
@@ -267,8 +298,8 @@
                 added++;
             }
         }
-        isProcessing = false;
-        checkGameOver();
+        if(added > 0) setTimeout(() => checkElimination(), 400);
+        else { isProcessing = false; checkGameOver(); }
     }
 
     function checkGameOver() {
@@ -285,6 +316,7 @@
         board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
         slotTargets = [];
         
+        // 建立透明目標層
         for(let r=0; r<6; r++){
             for(let c=0; c<6; c++){
                 const slot = document.createElement('div');
@@ -292,10 +324,13 @@
                 const stepW = boardEl.offsetWidth / 6;
                 const stepH = boardEl.offsetHeight / 6;
                 slot.style.transform = `translate(${c * stepW + (stepW*0.03)}px, ${r * stepH + (stepH*0.03)}px)`;
-                slot.onclick = () => {
+                slot.onclick = (e) => {
                     if(selectedTile && !isProcessing) {
                         const path = selectedTile.reachableMap.get(`${r},${c}`);
-                        if(path) executePathMove(board[selectedTile.r][selectedTile.c] || selectedTile, path);
+                        if(path) {
+                            // 注意：selectedTile 這裡存放的是點擊時的副本，需操作真正的 board 物件
+                            executePathMove(board[selectedTile.r][selectedTile.c] || selectedTile, path);
+                        }
                     }
                 };
                 boardEl.appendChild(slot);
@@ -303,15 +338,12 @@
             }
         }
         
-        // 隨機選一個位置當空格，其餘 35 格放牌
-        const allPositions = [];
-        for(let r=0; r<6; r++) for(let c=0; c<6; c++) allPositions.push({r, c});
-        allPositions.sort(() => Math.random() - 0.5);
-        
-        const emptyPos = allPositions.pop(); // 彈出一個位置作為開局空格
-        allPositions.forEach(pos => {
-            board[pos.r][pos.c] = createTile(pos.r, pos.c, true);
-        });
+        for(let r=0; r<ROWS; r++) {
+            for(let c=0; c<COLS; c++) {
+                if(r === 5 && c === 5) continue;
+                board[r][c] = createTile(r, c, true);
+            }
+        }
     }
 
     setInterval(() => {
