@@ -44,7 +44,12 @@
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
-        .tile.selected { box-shadow: 0 0 20px #ffeb3b, 0 3px 0 #bbb; z-index: 20; transform: translate(var(--tx), var(--ty)) scale(1.05) !important; }
+        .tile.selected { 
+            box-shadow: 0 0 20px #ffeb3b, 0 3px 0 #bbb; 
+            z-index: 20; 
+            transform: translate(var(--tx), var(--ty)) scale(1.05) !important;
+            filter: brightness(1.1);
+        }
         .tile.spawning { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
         
         .shattering {
@@ -62,11 +67,19 @@
 
         .slot-target {
             position: absolute; width: var(--tile-w); height: var(--tile-h);
-            background: rgba(255, 235, 59, 0.05); border: 2px dashed rgba(255, 235, 59, 0.3);
+            background: rgba(255, 235, 59, 0.05); 
+            border: 2px dashed rgba(255, 235, 59, 0.5);
             border-radius: 4px; z-index: 1; display: none;
+            cursor: pointer;
         }
-        .slot-target.active { display: block; z-index: 15; background: rgba(255, 235, 59, 0.25); border-color: #ffeb3b; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 0.8; } 100% { opacity: 0.4; } }
+        .slot-target.active { 
+            display: block; 
+            z-index: 15; 
+            background: rgba(255, 235, 59, 0.2); 
+            border-color: #ffeb3b; 
+            animation: pulse 1.2s infinite; 
+        }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
 
         #start-screen, #win-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -180,29 +193,29 @@
         if(isProcessing) return;
         if(selectedTile === obj) { clearSelection(); return; }
 
-        const reachable = [];
+        // 搜尋直線路徑上所有的空格
+        const reachableSlots = [];
         const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        
         dirs.forEach(([dr, dc]) => {
             let nr = obj.r + dr, nc = obj.c + dc;
-            let lastValid = null;
             while(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && board[nr][nc] === null) {
-                lastValid = {r: nr, c: nc};
+                reachableSlots.push({r: nr, c: nc});
                 nr += dr; nc += dc;
             }
-            if(lastValid) reachable.push(lastValid);
         });
 
-        if(reachable.length === 0) return;
+        if(reachableSlots.length === 0) return;
 
-        // 若只有一個可移動方向的路徑，直接滑到底
-        if(reachable.length === 1) {
-            executeMove(obj, reachable[0].r, reachable[0].c);
+        // 若只有一個空格選項，直接滑動
+        if(reachableSlots.length === 1) {
+            executeMove(obj, reachableSlots[0].r, reachableSlots[0].c);
         } else {
-            // 有多個方向路徑，停留在原地並顯示黃框，等待玩家點擊目標
+            // 如 image_2.png 所示，停在原地，顯示所有可達空格的虛線框
             clearSelection();
             selectedTile = obj;
             obj.el.classList.add('selected');
-            reachable.forEach(pos => {
+            reachableSlots.forEach(pos => {
                 const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
                 if(target) target.el.classList.add('active');
             });
@@ -298,7 +311,10 @@
                 const stepW = boardEl.offsetWidth / 6;
                 const stepH = boardEl.offsetHeight / 6;
                 slot.style.transform = `translate(${c * stepW + (stepW*0.03)}px, ${r * stepH + (stepH*0.03)}px)`;
-                slot.onclick = () => { if(selectedTile && !isProcessing) executeMove(selectedTile, r, c); };
+                slot.onclick = (e) => { 
+                    e.stopPropagation();
+                    if(selectedTile && !isProcessing) executeMove(selectedTile, r, c); 
+                };
                 boardEl.appendChild(slot);
                 slotTargets.push({r, c, el: slot});
             }
