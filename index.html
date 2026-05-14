@@ -40,7 +40,7 @@
             background: #fff; border-radius: 4px;
             box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
             display: flex; align-items: center; justify-content: center;
-            transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
@@ -193,17 +193,24 @@
         if(isProcessing) return;
         if(selectedTile === obj) { clearSelection(); return; }
 
-        // 搜尋直線路徑上所有的空格
+        // 使用 BFS 搜尋所有連通的空格（包含轉彎）
         const reachableSlots = [];
+        const queue = [{r: obj.r, c: obj.c}];
+        const visited = new Set([`${obj.r},${obj.c}`]);
         const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
-        
-        dirs.forEach(([dr, dc]) => {
-            let nr = obj.r + dr, nc = obj.c + dc;
-            while(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && board[nr][nc] === null) {
-                reachableSlots.push({r: nr, c: nc});
-                nr += dr; nc += dc;
-            }
-        });
+
+        while(queue.length > 0) {
+            const curr = queue.shift();
+            dirs.forEach(([dr, dc]) => {
+                const nr = curr.r + dr, nc = curr.c + dc;
+                const key = `${nr},${nc}`;
+                if(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && !visited.has(key) && board[nr][nc] === null) {
+                    visited.add(key);
+                    reachableSlots.push({r: nr, c: nc});
+                    queue.push({r: nr, c: nc});
+                }
+            });
+        }
 
         if(reachableSlots.length === 0) return;
 
@@ -211,7 +218,6 @@
         if(reachableSlots.length === 1) {
             executeMove(obj, reachableSlots[0].r, reachableSlots[0].c);
         } else {
-            // 如 image_2.png 所示，停在原地，顯示所有可達空格的虛線框
             clearSelection();
             selectedTile = obj;
             obj.el.classList.add('selected');
@@ -229,7 +235,7 @@
         obj.r = tr; obj.c = tc;
         board[tr][tc] = obj;
         updateTilePos(obj);
-        setTimeout(() => checkElimination(), 350);
+        setTimeout(() => checkElimination(), 450);
     }
 
     function clearSelection() {
