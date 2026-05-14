@@ -40,14 +40,13 @@
             background: #fff; border-radius: 4px;
             box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
             display: flex; align-items: center; justify-content: center;
-            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
+            transition: transform 0.15s linear, opacity 0.2s; /* 改為線性短過渡以銜接路徑 */
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
         .tile.selected { 
             box-shadow: 0 0 20px #ffeb3b, 0 3px 0 #bbb; 
             z-index: 20; 
-            transform: translate(var(--tx), var(--ty)) scale(1.05) !important;
             filter: brightness(1.1);
         }
         .tile.spawning { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
@@ -189,14 +188,10 @@
         return obj;
     }
 
-    function handleTileClick(obj) {
-        if(isProcessing) return;
-        if(selectedTile === obj) { clearSelection(); return; }
-
-        // 使用 BFS 搜尋所有連通的空格（包含轉彎）
-        const reachableSlots = [];
-        const queue = [{r: obj.r, c: obj.c}];
-        const visited = new Set([`${obj.r},${obj.c}`]);
+    function findReachable(r, c) {
+        const reachableMap = new Map();
+        const queue = [{r, c, path: []}];
+        const visited = new Set([`${r},${c}`]);
         const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
 
         while(queue.length > 0) {
@@ -206,40 +201,61 @@
                 const key = `${nr},${nc}`;
                 if(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && !visited.has(key) && board[nr][nc] === null) {
                     visited.add(key);
-                    reachableSlots.push({r: nr, c: nc});
-                    queue.push({r: nr, c: nc});
+                    const newPath = [...curr.path, {r: nr, c: nc}];
+                    reachableMap.set(key, newPath);
+                    queue.push({r: nr, c: nc, path: newPath});
                 }
             });
         }
+        return reachableMap;
+    }
 
-        if(reachableSlots.length === 0) return;
+    function handleTileClick(obj) {
+        if(isProcessing) return;
+        if(selectedTile === obj) { clearSelection(); return; }
 
-        // 若只有一個空格選項，直接滑動
-        if(reachableSlots.length === 1) {
-            executeMove(obj, reachableSlots[0].r, reachableSlots[0].c);
+        const reachableMap = findReachable(obj.r, obj.c);
+        if(reachableMap.size === 0) return;
+
+        // 若只有唯一一個空格位置可去，直接自動移動
+        if(reachableMap.size === 1) {
+            const path = Array.from(reachableMap.values())[0];
+            executePathMove(obj, path);
         } else {
             clearSelection();
-            selectedTile = obj;
+            selectedTile = { ...obj, reachableMap }; 
             obj.el.classList.add('selected');
-            reachableSlots.forEach(pos => {
-                const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
+            reachableMap.forEach((path, key) => {
+                const [r, c] = key.split(',').map(Number);
+                const target = slotTargets.find(s => s.r === r && s.c === c);
                 if(target) target.el.classList.add('active');
             });
         }
     }
 
-    function executeMove(obj, tr, tc) {
+    // 循序滑動邏輯
+    async function executePathMove(obj, path) {
         isProcessing = true;
         clearSelection();
         board[obj.r][obj.c] = null;
-        obj.r = tr; obj.c = tc;
-        board[tr][tc] = obj;
-        updateTilePos(obj);
-        setTimeout(() => checkElimination(), 450);
+
+        // 循著路徑一格一格滑動
+        for(let step of path) {
+            obj.r = step.r;
+            obj.c = step.c;
+            updateTilePos(obj);
+            await new Promise(r => setTimeout(r, 120)); // 每格滑動時間
+        }
+
+        board[obj.r][obj.c] = obj;
+        setTimeout(() => checkElimination(), 200);
     }
 
     function clearSelection() {
-        if(selectedTile) selectedTile.el.classList.remove('selected');
+        if(selectedTile) {
+            const originalEl = document.querySelectorAll('.tile');
+            originalEl.forEach(el => el.classList.remove('selected'));
+        }
         selectedTile = null;
         slotTargets.forEach(s => s.el.classList.remove('active'));
     }
@@ -319,7 +335,10 @@
                 slot.style.transform = `translate(${c * stepW + (stepW*0.03)}px, ${r * stepH + (stepH*0.03)}px)`;
                 slot.onclick = (e) => { 
                     e.stopPropagation();
-                    if(selectedTile && !isProcessing) executeMove(selectedTile, r, c); 
+                    if(selectedTile && !isProcessing) {
+                        const path = selectedTile.reachableMap.get(`${r},${c}`);
+                        if(path) executePathMove(selectedTile, path);
+                    }
                 };
                 boardEl.appendChild(slot);
                 slotTargets.push({r, c, el: slot});
