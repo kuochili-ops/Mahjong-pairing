@@ -40,7 +40,7 @@
             background: #fff; border-radius: 4px;
             box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
             display: flex; align-items: center; justify-content: center;
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
@@ -180,23 +180,31 @@
         if(isProcessing) return;
         if(selectedTile === obj) { clearSelection(); return; }
 
-        const adj = [];
-        [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr, dc]) => {
-            const nr = obj.r + dr, nc = obj.c + dc;
-            if(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && board[nr][nc] === null) adj.push({r: nr, c: nc});
+        // 搜尋所有可滑動路徑
+        const reachable = [];
+        const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        dirs.forEach(([dr, dc]) => {
+            let nr = obj.r + dr, nc = obj.c + dc;
+            let lastValid = null;
+            // 沿著該方向一直找到阻礙為止
+            while(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && board[nr][nc] === null) {
+                lastValid = {r: nr, c: nc};
+                nr += dr; nc += dc;
+            }
+            if(lastValid) reachable.push(lastValid);
         });
 
-        if(adj.length === 0) return;
+        if(reachable.length === 0) return;
 
-        // 修改移動邏輯：若只有一個空格，直接移動
-        if(adj.length === 1) {
-            executeMove(obj, adj[0].r, adj[0].c);
+        // 若只有一個可行方向，直接滑到最底
+        if(reachable.length === 1) {
+            executeMove(obj, reachable[0].r, reachable[0].c);
         } else {
-            // 多個空格，維持在原地等待玩家決定方向
+            // 有多個方向，停留在原地等待
             clearSelection();
             selectedTile = obj;
             obj.el.classList.add('selected');
-            adj.forEach(pos => {
+            reachable.forEach(pos => {
                 const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
                 if(target) target.el.classList.add('active');
             });
@@ -210,7 +218,8 @@
         obj.r = tr; obj.c = tc;
         board[tr][tc] = obj;
         updateTilePos(obj);
-        setTimeout(() => checkElimination(), 250);
+        // 等待滑動動畫完成後檢查消除
+        setTimeout(() => checkElimination(), 350);
     }
 
     function clearSelection() {
@@ -250,7 +259,7 @@
             setTimeout(() => { 
                 toKill.forEach(item => item.el.remove()); 
                 refill(killedPairs * 2); 
-            }, 400);
+            }, 450);
         } else {
             isProcessing = false;
             checkGameOver();
