@@ -148,8 +148,6 @@
     function createTile(r, c, isInitial = false) {
         if (deck.length === 0) return null;
         let tileCode = "";
-        
-        // 開局擺放 35 張牌，嚴格防鄰接
         if (isInitial) {
             for (let i = 0; i < deck.length; i++) {
                 let candidate = deck[i];
@@ -161,9 +159,7 @@
                 }
             }
         }
-        
         if (!tileCode) tileCode = deck.shift();
-
         document.getElementById('deck-count').innerText = `𓃥 剩餘：${deck.length}`;
         const el = document.createElement('div');
         el.className = 'tile' + (isInitial ? '' : ' spawning');
@@ -202,7 +198,6 @@
         if(selectedTile && selectedTile.el === obj.el) { clearSelection(); return; }
         const reachableMap = findReachable(obj.r, obj.c);
         if(reachableMap.size === 0) return;
-        
         if(reachableMap.size === 1) {
             executePathMove(obj, reachableMap.values().next().value);
         } else {
@@ -227,7 +222,6 @@
             await new Promise(res => setTimeout(res, 130));
         }
         board[obj.r][obj.c] = obj;
-        // 移動完畢，立即啟動全局連鎖檢查
         setTimeout(() => checkGlobalElimination(), 100);
     }
 
@@ -237,22 +231,33 @@
         selectedTile = null;
     }
 
-    // 全局消除邏輯：找出整盤所有相鄰且同色的牌（支援三連張或更多）
+    // 關鍵修正：確保一次只消除一對（兩張），防止最後剩下單數張牌
     function checkGlobalElimination() {
         let toKill = new Set();
+        let matched = false;
+
         for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) {
                 const curr = board[r][c];
                 if(!curr) continue;
-                [[0,1], [1,0]].forEach(([dr, dc]) => {
+
+                // 檢查右方與下方
+                const neighbors = [[0,1], [1,0]];
+                for(let [dr, dc] of neighbors) {
                     const nr = r + dr, nc = c + dc;
                     const neighbor = (board[nr] && board[nr][nc]);
+                    
                     if(neighbor && neighbor.code === curr.code) {
+                        // 找到一對就標記並跳出，確保這次循環只消這兩張
                         toKill.add(curr);
                         toKill.add(neighbor);
+                        matched = true;
+                        break; 
                     }
-                });
+                }
+                if(matched) break; // 嚴格執行：一對一對消
             }
+            if(matched) break;
         }
 
         if(toKill.size > 0) {
@@ -262,7 +267,7 @@
             });
             setTimeout(() => { 
                 toKill.forEach(item => item.el.remove()); 
-                refill(toKill.size); // 消完後補牌
+                refill(toKill.size); 
             }, 450);
         } else {
             isProcessing = false;
@@ -284,7 +289,6 @@
             }
         }
         
-        // 重點：補牌發生相同牌鄰接，則直接消除並再補牌 (連鎖機制)
         if(filledCount > 0) {
             setTimeout(() => checkGlobalElimination(), 400);
         } else {
@@ -323,8 +327,6 @@
                 slotTargets.push({r, c, el: slot});
             }
         }
-        
-        // 隨機選一個空格，其餘 35 格按防鄰接擺放
         const emptyR = Math.floor(Math.random() * ROWS), emptyC = Math.floor(Math.random() * COLS);
         for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) {
