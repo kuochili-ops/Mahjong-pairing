@@ -68,7 +68,6 @@
         .slot-target.active { display: block; z-index: 15; background: rgba(255, 235, 59, 0.25); border-color: #ffeb3b; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 0.8; } 100% { opacity: 0.4; } }
 
-        /* 模式選擇彈窗 */
         #start-screen, #win-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
@@ -123,17 +122,13 @@
 
     function initGame(mode) {
         document.getElementById('start-screen').style.display = 'none';
-        
         let allTypes = [];
-        const suits = ['m','s','p']; // 萬、條、餅
-        const honors = ['1z','2z','3z','4z','5z','6z','7z']; // 字牌
+        const suits = ['m','s','p'];
+        const honors = ['1z','2z','3z','4z','5z','6z','7z'];
 
         if (mode === 'lite') {
-            // 隨機選兩種花色
             const shuffledSuits = suits.sort(() => Math.random() - 0.5).slice(0, 2);
-            shuffledSuits.forEach(s => {
-                for(let i=1; i<=9; i++) allTypes.push(`${i}${s}`);
-            });
+            shuffledSuits.forEach(s => { for(let i=1; i<=9; i++) allTypes.push(`${i}${s}`); });
         } else {
             suits.forEach(s => { for(let i=1; i<=9; i++) allTypes.push(`${i}${s}`); });
             honors.forEach(h => allTypes.push(h));
@@ -141,7 +136,6 @@
 
         allTypes.forEach(code => { for(let j=0; j<4; j++) deck.push(code); });
         deck.sort(() => Math.random() - 0.5);
-        
         setupBoard();
         timerActive = true;
     }
@@ -184,8 +178,6 @@
 
     function handleTileClick(obj) {
         if(isProcessing) return;
-        
-        // 若點擊已選取的牌，則取消選擇
         if(selectedTile === obj) { clearSelection(); return; }
 
         const adj = [];
@@ -196,18 +188,14 @@
 
         if(adj.length === 0) return;
 
-        // 清除舊選擇，停留在原地等待
-        clearSelection();
-        selectedTile = obj;
-        obj.el.classList.add('selected');
-
+        // 修改移動邏輯：若只有一個空格，直接移動
         if(adj.length === 1) {
-            // 即使只有一個方向，也顯示目標框讓玩家確認點擊
-            const pos = adj[0];
-            const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
-            if(target) target.el.classList.add('active');
+            executeMove(obj, adj[0].r, adj[0].c);
         } else {
-            // 多個方向，顯示所有可選空格
+            // 多個空格，維持在原地等待玩家決定方向
+            clearSelection();
+            selectedTile = obj;
+            obj.el.classList.add('selected');
             adj.forEach(pos => {
                 const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
                 if(target) target.el.classList.add('active');
