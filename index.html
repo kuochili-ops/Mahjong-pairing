@@ -47,7 +47,6 @@
         .tile.selected { box-shadow: 0 0 15px #ffeb3b, 0 3px 0 #bbb; z-index: 10; transform: scale(1.08) !important; }
         .tile.spawning { transform: scale(0); opacity: 0; }
         
-        /* 原地粉碎效果 */
         .shattering {
             animation: shatterInPlace 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
             pointer-events: none;
@@ -191,21 +190,29 @@
 
     function checkElimination() {
         let toKill = new Set();
-        let pairsCount = 0;
+        let killedPairs = 0;
+        let visited = new Set();
 
-        // 偵測所有相鄰對子
+        // 掃描盤面進行兩兩配對
         for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) {
                 const curr = board[r][c];
-                if(!curr) continue;
+                if(!curr || visited.has(curr)) continue;
+
+                // 優先判定上方 (r-1) 或左方 (c-1) 是否有相同牌
+                // 這裡掃描方向改為檢查 右 (c+1) 與 下 (r+1) 來決定配對
+                let matched = false;
                 [[0,1], [1,0]].forEach(([dr, dc]) => {
+                    if (matched) return;
                     const nr = r + dr, nc = c + dc;
-                    if(board[nr] && board[nr][nc] && board[nr][nc].code === curr.code) {
-                        const beforeSize = toKill.size;
-                        toKill.add(curr); 
-                        toKill.add(board[nr][nc]);
-                        // 如果 Set 增加了，代表找到新的一對
-                        if (toKill.size > beforeSize) pairsCount++;
+                    const target = (board[nr] && board[nr][nc]);
+                    if(target && target.code === curr.code && !visited.has(target)) {
+                        toKill.add(curr);
+                        toKill.add(target);
+                        visited.add(curr);
+                        visited.add(target);
+                        killedPairs++;
+                        matched = true;
                     }
                 });
             }
@@ -217,10 +224,9 @@
                 board[item.r][item.c] = null; 
             });
             
-            // 關鍵修改：消掉幾對就補幾對 (1對補2張)
             setTimeout(() => { 
                 toKill.forEach(item => item.el.remove()); 
-                refill(pairsCount * 2); 
+                refill(killedPairs * 2); 
             }, 400);
         } else {
             isProcessing = false;
@@ -242,7 +248,6 @@
             if(t) { board[pos.r][pos.c] = t; actualAdded++; }
         }
         
-        // 補完後再次檢查是否能連鎖消除
         if(actualAdded > 0) setTimeout(() => checkElimination(), 350);
         else { isProcessing = false; checkGameOver(); }
     }
