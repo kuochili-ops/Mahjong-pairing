@@ -40,11 +40,11 @@
             background: #fff; border-radius: 4px;
             box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
             display: flex; align-items: center; justify-content: center;
-            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
+            transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
-        .tile.selected { box-shadow: 0 0 20px #ffeb3b, 0 3px 0 #bbb; z-index: 20; transform: translate(var(--tx), var(--ty)) scale(1.1) !important; }
+        .tile.selected { box-shadow: 0 0 20px #ffeb3b, 0 3px 0 #bbb; z-index: 20; transform: translate(var(--tx), var(--ty)) scale(1.05) !important; }
         .tile.spawning { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
         
         .shattering {
@@ -53,7 +53,7 @@
             z-index: 30;
         }
         @keyframes shatterInPlace {
-            0% { transform: translate(var(--tx), var(--ty)) scale(1.1); filter: brightness(1); }
+            0% { transform: translate(var(--tx), var(--ty)) scale(1.05); filter: brightness(1); }
             20% { transform: translate(var(--tx), var(--ty)) scale(1.2) rotate(4deg); filter: brightness(1.6); }
             40% { transform: translate(var(--tx), var(--ty)) scale(0.8) rotate(-4deg); }
             60% { transform: translate(var(--tx), var(--ty)) scale(1.4) rotate(2deg); filter: brightness(2) contrast(1.2); }
@@ -180,13 +180,11 @@
         if(isProcessing) return;
         if(selectedTile === obj) { clearSelection(); return; }
 
-        // 搜尋所有可滑動路徑
         const reachable = [];
         const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
         dirs.forEach(([dr, dc]) => {
             let nr = obj.r + dr, nc = obj.c + dc;
             let lastValid = null;
-            // 沿著該方向一直找到阻礙為止
             while(nr>=0 && nr<ROWS && nc>=0 && nc<COLS && board[nr][nc] === null) {
                 lastValid = {r: nr, c: nc};
                 nr += dr; nc += dc;
@@ -196,11 +194,11 @@
 
         if(reachable.length === 0) return;
 
-        // 若只有一個可行方向，直接滑到最底
+        // 若只有一個可移動方向的路徑，直接滑到底
         if(reachable.length === 1) {
             executeMove(obj, reachable[0].r, reachable[0].c);
         } else {
-            // 有多個方向，停留在原地等待
+            // 有多個方向路徑，停留在原地並顯示黃框，等待玩家點擊目標
             clearSelection();
             selectedTile = obj;
             obj.el.classList.add('selected');
@@ -218,7 +216,6 @@
         obj.r = tr; obj.c = tc;
         board[tr][tc] = obj;
         updateTilePos(obj);
-        // 等待滑動動畫完成後檢查消除
         setTimeout(() => checkElimination(), 350);
     }
 
