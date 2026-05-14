@@ -40,57 +40,72 @@
             background: #fff; border-radius: 4px;
             box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
             display: flex; align-items: center; justify-content: center;
-            transition: transform 0.2s ease-out, opacity 0.2s;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
-        .tile.selected { box-shadow: 0 0 15px #ffeb3b, 0 3px 0 #bbb; z-index: 10; transform: scale(1.08) !important; }
-        .tile.spawning { transform: scale(0); opacity: 0; }
+        .tile.selected { box-shadow: 0 0 20px #ffeb3b, 0 3px 0 #bbb; z-index: 20; transform: translate(var(--tx), var(--ty)) scale(1.1) !important; }
+        .tile.spawning { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
         
         .shattering {
             animation: shatterInPlace 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
             pointer-events: none;
-            z-index: 20;
+            z-index: 30;
         }
         @keyframes shatterInPlace {
-            0% { transform: translate(var(--tx), var(--ty)) scale(1); filter: brightness(1); }
-            20% { transform: translate(var(--tx), var(--ty)) scale(1.1) rotate(3deg); filter: brightness(1.6); }
-            40% { transform: translate(var(--tx), var(--ty)) scale(0.8) rotate(-3deg); }
-            60% { transform: translate(var(--tx), var(--ty)) scale(1.3) rotate(1deg); filter: brightness(2) contrast(1.2); }
-            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; filter: blur(10px); }
+            0% { transform: translate(var(--tx), var(--ty)) scale(1.1); filter: brightness(1); }
+            20% { transform: translate(var(--tx), var(--ty)) scale(1.2) rotate(4deg); filter: brightness(1.6); }
+            40% { transform: translate(var(--tx), var(--ty)) scale(0.8) rotate(-4deg); }
+            60% { transform: translate(var(--tx), var(--ty)) scale(1.4) rotate(2deg); filter: brightness(2) contrast(1.2); }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; filter: blur(12px); }
         }
 
         .slot-target {
             position: absolute; width: var(--tile-w); height: var(--tile-h);
-            background: rgba(255, 255, 255, 0.05); border: 2px dashed rgba(255, 255, 255, 0.2);
+            background: rgba(255, 235, 59, 0.05); border: 2px dashed rgba(255, 235, 59, 0.3);
             border-radius: 4px; z-index: 1; display: none;
         }
-        .slot-target.active { display: block; z-index: 11; background: rgba(255, 235, 59, 0.15); border-color: #ffeb3b; }
+        .slot-target.active { display: block; z-index: 15; background: rgba(255, 235, 59, 0.25); border-color: #ffeb3b; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 0.8; } 100% { opacity: 0.4; } }
 
-        #win-screen {
+        /* 模式選擇彈窗 */
+        #start-screen, #win-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); display: none; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 100; color: white;
+            background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 1000; color: white;
+            text-align: center; padding: 20px;
         }
-        #win-screen h1 { color: #ffc107; font-size: 2rem; margin-bottom: 10px; }
-        #win-screen button {
-            margin-top: 30px; padding: 12px 40px; font-size: 1.2rem;
-            background: #4caf50; border: none; color: white; border-radius: 30px; font-weight: bold;
+        .menu-box { background: #222; padding: 30px; border-radius: 20px; border: 2px solid #ffc107; max-width: 300px; }
+        h2 { color: #ffc107; margin-top: 0; }
+        .btn-start {
+            width: 100%; margin: 10px 0; padding: 15px; font-size: 1.1rem;
+            background: #4caf50; border: none; color: white; border-radius: 10px;
+            font-weight: bold; cursor: pointer; transition: 0.2s;
         }
+        .btn-start:active { transform: scale(0.95); }
+        .btn-start.alt { background: #2196f3; }
     </style>
 </head>
 <body>
 
+<div id="start-screen">
+    <div class="menu-box">
+        <h2>𓃥 選擇遊戲模式</h2>
+        <button class="btn-start" onclick="initGame('full')">完整挑戰 (144張)</button>
+        <button class="btn-start alt" onclick="initGame('lite')">精簡模式 (72張)</button>
+    </div>
+</div>
+
 <div class="dashboard">
-    <div id="deck-count">𓃥 剩餘：144</div>
+    <div id="deck-count">𓃥 剩餘：--</div>
     <div id="game-timer">00:00</div>
 </div>
 <div id="game-board" class="board"></div>
 
-<div id="win-screen">
+<div id="win-screen" style="display:none;">
     <h1>𓃥 任務完成！</h1>
     <p id="final-time">總用時：00:00</p>
-    <button onclick="location.reload()">重新挑戰</button>
+    <button class="btn-start" onclick="location.reload()">重新挑戰</button>
 </div>
 
 <script>
@@ -98,20 +113,38 @@
     const baseUrl = "https://raw.githubusercontent.com/kuochili-ops/mahjong_graphic/main/Vectors%20%E7%9F%A2%E9%87%8F%E5%9B%BE/SVG/";
     
     let deck = [];
-    const types = [];
-    for(let i=1; i<=9; i++) ['m','s','p'].forEach(t => types.push(`${i}${t}`));
-    for(let i=1; i<=7; i++) types.push(`${i}z`);
-    types.forEach(code => { for(let j=0; j<4; j++) deck.push(code); });
-    deck.sort(() => Math.random() - 0.5);
-
     let board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
     let isProcessing = false;
     let selectedTile = null;
     let seconds = 0;
-    let timerActive = true;
+    let timerActive = false;
     let slotTargets = [];
-
     const boardEl = document.getElementById('game-board');
+
+    function initGame(mode) {
+        document.getElementById('start-screen').style.display = 'none';
+        
+        let allTypes = [];
+        const suits = ['m','s','p']; // 萬、條、餅
+        const honors = ['1z','2z','3z','4z','5z','6z','7z']; // 字牌
+
+        if (mode === 'lite') {
+            // 隨機選兩種花色
+            const shuffledSuits = suits.sort(() => Math.random() - 0.5).slice(0, 2);
+            shuffledSuits.forEach(s => {
+                for(let i=1; i<=9; i++) allTypes.push(`${i}${s}`);
+            });
+        } else {
+            suits.forEach(s => { for(let i=1; i<=9; i++) allTypes.push(`${i}${s}`); });
+            honors.forEach(h => allTypes.push(h));
+        }
+
+        allTypes.forEach(code => { for(let j=0; j<4; j++) deck.push(code); });
+        deck.sort(() => Math.random() - 0.5);
+        
+        setupBoard();
+        timerActive = true;
+    }
 
     function updateTilePos(obj) {
         const stepW = boardEl.offsetWidth / 6;
@@ -151,6 +184,8 @@
 
     function handleTileClick(obj) {
         if(isProcessing) return;
+        
+        // 若點擊已選取的牌，則取消選擇
         if(selectedTile === obj) { clearSelection(); return; }
 
         const adj = [];
@@ -160,11 +195,19 @@
         });
 
         if(adj.length === 0) return;
-        if(adj.length === 1) { executeMove(obj, adj[0].r, adj[0].c); }
-        else {
-            clearSelection();
-            selectedTile = obj;
-            obj.el.classList.add('selected');
+
+        // 清除舊選擇，停留在原地等待
+        clearSelection();
+        selectedTile = obj;
+        obj.el.classList.add('selected');
+
+        if(adj.length === 1) {
+            // 即使只有一個方向，也顯示目標框讓玩家確認點擊
+            const pos = adj[0];
+            const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
+            if(target) target.el.classList.add('active');
+        } else {
+            // 多個方向，顯示所有可選空格
             adj.forEach(pos => {
                 const target = slotTargets.find(s => s.r === pos.r && s.c === pos.c);
                 if(target) target.el.classList.add('active');
@@ -193,26 +236,19 @@
         let killedPairs = 0;
         let visited = new Set();
 
-        // 掃描盤面進行兩兩配對
         for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) {
                 const curr = board[r][c];
                 if(!curr || visited.has(curr)) continue;
-
-                // 優先判定上方 (r-1) 或左方 (c-1) 是否有相同牌
-                // 這裡掃描方向改為檢查 右 (c+1) 與 下 (r+1) 來決定配對
                 let matched = false;
                 [[0,1], [1,0]].forEach(([dr, dc]) => {
                     if (matched) return;
                     const nr = r + dr, nc = c + dc;
                     const target = (board[nr] && board[nr][nc]);
                     if(target && target.code === curr.code && !visited.has(target)) {
-                        toKill.add(curr);
-                        toKill.add(target);
-                        visited.add(curr);
-                        visited.add(target);
-                        killedPairs++;
-                        matched = true;
+                        toKill.add(curr); toKill.add(target);
+                        visited.add(curr); visited.add(target);
+                        killedPairs++; matched = true;
                     }
                 });
             }
@@ -223,7 +259,6 @@
                 item.el.classList.add('shattering');
                 board[item.r][item.c] = null; 
             });
-            
             setTimeout(() => { 
                 toKill.forEach(item => item.el.remove()); 
                 refill(killedPairs * 2); 
@@ -240,14 +275,12 @@
             for(let c=0; c<COLS; c++) { if(!board[r][c]) emptyCells.push({r, c}); }
         }
         emptyCells.sort(() => Math.random() - 0.5);
-        
         let actualAdded = 0;
         for(let i=0; i < Math.min(emptyCells.length, count); i++) {
             const pos = emptyCells[i];
             const t = createTile(pos.r, pos.c, false);
             if(t) { board[pos.r][pos.c] = t; actualAdded++; }
         }
-        
         if(actualAdded > 0) setTimeout(() => checkElimination(), 350);
         else { isProcessing = false; checkGameOver(); }
     }
@@ -261,7 +294,9 @@
         }
     }
 
-    window.onload = () => {
+    function setupBoard() {
+        boardEl.innerHTML = '';
+        slotTargets = [];
         for(let r=0; r<6; r++){
             for(let c=0; c<6; c++){
                 const slot = document.createElement('div');
@@ -280,15 +315,17 @@
                 board[r][c] = createTile(r, c, true);
             }
         }
-        setInterval(() => {
-            if(!timerActive) return;
-            seconds++;
-            const m = Math.floor(seconds/60).toString().padStart(2,'0');
-            const s = (seconds%60).toString().padStart(2,'0');
-            document.getElementById('game-timer').innerText = `${m}:${s}`;
-        }, 1000);
-        boardEl.onclick = clearSelection;
-    };
+    }
+
+    setInterval(() => {
+        if(!timerActive) return;
+        seconds++;
+        const m = Math.floor(seconds/60).toString().padStart(2,'0');
+        const s = (seconds%60).toString().padStart(2,'0');
+        document.getElementById('game-timer').innerText = `${m}:${s}`;
+    }, 1000);
+
+    boardEl.onclick = clearSelection;
 </script>
 </body>
 </html>
