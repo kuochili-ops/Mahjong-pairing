@@ -40,7 +40,7 @@
             background: #fff; border-radius: 4px;
             box-shadow: 0 3px 0 #bbb, inset 0 -1px 3px rgba(0,0,0,0.1);
             display: flex; align-items: center; justify-content: center;
-            transition: transform 0.15s linear, opacity 0.2s; /* 改為線性短過渡以銜接路徑 */
+            transition: transform 0.15s linear, opacity 0.2s;
             z-index: 2; cursor: pointer;
         }
         .tile img { width: 85%; height: 85%; pointer-events: none; }
@@ -164,16 +164,7 @@
 
     function createTile(r, c, isInitial = false) {
         if (deck.length === 0) return null;
-        let tileCode = "";
-        if(isInitial) {
-            for(let i=0; i<deck.length; i++) {
-                const code = deck[i];
-                const upMatch = (board[r-1] && board[r-1][c] && board[r-1][c].code === code);
-                const leftMatch = (board[r] && board[r][c-1] && board[r][c-1].code === code);
-                if(!upMatch && !leftMatch) { tileCode = deck.splice(i, 1)[0]; break; }
-            }
-        }
-        if(!tileCode) tileCode = deck.shift();
+        let tileCode = deck.shift();
         document.getElementById('deck-count').innerText = `𓃥 剩餘：${deck.length}`;
 
         const el = document.createElement('div');
@@ -212,72 +203,59 @@
 
     function handleTileClick(obj) {
         if(isProcessing) return;
-        if(selectedTile === obj) { clearSelection(); return; }
+        if(selectedTile && selectedTile.el === obj.el) { clearSelection(); return; }
 
         const reachableMap = findReachable(obj.r, obj.c);
         if(reachableMap.size === 0) return;
 
-        // 若只有唯一一個空格位置可去，直接自動移動
-        if(reachableMap.size === 1) {
-            const path = Array.from(reachableMap.values())[0];
-            executePathMove(obj, path);
-        } else {
-            clearSelection();
-            selectedTile = { ...obj, reachableMap }; 
-            obj.el.classList.add('selected');
-            reachableMap.forEach((path, key) => {
-                const [r, c] = key.split(',').map(Number);
-                const target = slotTargets.find(s => s.r === r && s.c === c);
-                if(target) target.el.classList.add('active');
-            });
-        }
+        clearSelection();
+        selectedTile = { ...obj, reachableMap }; 
+        obj.el.classList.add('selected');
+        reachableMap.forEach((path, key) => {
+            const [r, c] = key.split(',').map(Number);
+            const target = slotTargets.find(s => s.r === r && s.c === c);
+            if(target) target.el.classList.add('active');
+        });
     }
 
-    // 循序滑動邏輯
     async function executePathMove(obj, path) {
         isProcessing = true;
         clearSelection();
         board[obj.r][obj.c] = null;
 
-        // 循著路徑一格一格滑動
         for(let step of path) {
             obj.r = step.r;
             obj.c = step.c;
             updateTilePos(obj);
-            await new Promise(r => setTimeout(r, 120)); // 每格滑動時間
+            await new Promise(r => setTimeout(r, 120));
         }
 
         board[obj.r][obj.c] = obj;
+        // 滑動結束後立即執行消除判定
         setTimeout(() => checkElimination(), 200);
     }
 
     function clearSelection() {
-        if(selectedTile) {
-            const originalEl = document.querySelectorAll('.tile');
-            originalEl.forEach(el => el.classList.remove('selected'));
-        }
+        document.querySelectorAll('.tile').forEach(el => el.classList.remove('selected'));
         selectedTile = null;
         slotTargets.forEach(s => s.el.classList.remove('active'));
     }
 
     function checkElimination() {
         let toKill = new Set();
-        let killedPairs = 0;
         let visited = new Set();
 
         for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) {
                 const curr = board[r][c];
                 if(!curr || visited.has(curr)) continue;
-                let matched = false;
+                
                 [[0,1], [1,0]].forEach(([dr, dc]) => {
-                    if (matched) return;
                     const nr = r + dr, nc = c + dc;
                     const target = (board[nr] && board[nr][nc]);
                     if(target && target.code === curr.code && !visited.has(target)) {
                         toKill.add(curr); toKill.add(target);
                         visited.add(curr); visited.add(target);
-                        killedPairs++; matched = true;
                     }
                 });
             }
@@ -290,7 +268,7 @@
             });
             setTimeout(() => { 
                 toKill.forEach(item => item.el.remove()); 
-                refill(killedPairs * 2); 
+                refill(toKill.size); 
             }, 450);
         } else {
             isProcessing = false;
@@ -301,14 +279,25 @@
     function refill(count) {
         let emptyCells = [];
         for(let r=0; r<ROWS; r++) {
+            for(let c=0; c<COLS; r++) { // 修正迴圈變數
+                for(let c=0; c<COLS; c++) { if(!board[r][c]) emptyCells.push({r, c}); }
+            }
+        }
+        // 重新獲取空格 (邏輯修正)
+        emptyCells = [];
+        for(let r=0; r<ROWS; r++) {
             for(let c=0; c<COLS; c++) { if(!board[r][c]) emptyCells.push({r, c}); }
         }
+
         emptyCells.sort(() => Math.random() - 0.5);
         let actualAdded = 0;
         for(let i=0; i < Math.min(emptyCells.length, count); i++) {
-            const pos = emptyCells[i];
-            const t = createTile(pos.r, pos.c, false);
-            if(t) { board[pos.r][pos.c] = t; actualAdded++; }
+            if(deck.length > 0) {
+                const pos = emptyCells[i];
+                const t = createTile(pos.r, pos.c, false);
+                board[pos.r][pos.c] = t;
+                actualAdded++;
+            }
         }
         if(actualAdded > 0) setTimeout(() => checkElimination(), 350);
         else { isProcessing = false; checkGameOver(); }
@@ -325,6 +314,7 @@
 
     function setupBoard() {
         boardEl.innerHTML = '';
+        board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
         slotTargets = [];
         for(let r=0; r<6; r++){
             for(let c=0; c<6; c++){
@@ -337,7 +327,11 @@
                     e.stopPropagation();
                     if(selectedTile && !isProcessing) {
                         const path = selectedTile.reachableMap.get(`${r},${c}`);
-                        if(path) executePathMove(selectedTile, path);
+                        if(path) {
+                            // 這裡要傳入原始的 tile 物件參考
+                            const originalTile = board[selectedTile.r][selectedTile.c];
+                            executePathMove(originalTile, path);
+                        }
                     }
                 };
                 boardEl.appendChild(slot);
